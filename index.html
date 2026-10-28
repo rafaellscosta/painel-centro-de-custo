@@ -1241,16 +1241,19 @@
     }
 
 
-        async function captureDashboardScreenshot() {
+            let lastScreenshotDataUrl = null;
+    let lastScreenshotBlob = null;
+    let lastScreenshotFilename = '';
+
+    async function captureDashboardScreenshot() {
       const btn = document.getElementById('btnCaptureScreen');
       const btnText = document.getElementById('btnCaptureText');
       const originalText = btnText ? btnText.textContent : 'Capturar Tela';
 
       try {
-        if (btnText) btnText.textContent = 'Gerando PNG...';
+        if (btnText) btnText.textContent = 'Gerando...';
         if (btn) btn.disabled = true;
 
-        // Switch to overview tab if on another tab
         const activeTabBtn = document.querySelector('nav button.tab-active');
         const activeTabId = activeTabBtn ? activeTabBtn.id.replace('tab-', '') : 'overview';
         const needsSwitch = activeTabId !== 'overview';
@@ -1266,7 +1269,7 @@
         }
 
         if (typeof html2canvas === 'undefined') {
-          throw new Error('A biblioteca de captura (html2canvas) nÃ£o foi carregada.');
+          throw new Error('A biblioteca html2canvas nÃ£o foi carregada.');
         }
 
         const isLight = document.documentElement.classList.contains('light');
@@ -1278,36 +1281,37 @@
           logging: false,
           backgroundColor: bgColor,
           ignoreElements: function(el) {
-            return el.id === 'btnCaptureScreen' || el.id === 'dashboard-toast';
+            return el.id === 'btnCaptureScreen' || el.id === 'dashboard-toast' || el.id === 'screenshot-modal';
           }
         });
 
         const now = new Date();
         const dateStr = now.toISOString().slice(0, 10);
-        const fileName = 'Painel_Executivo_Centro_de_Custo_' + dateStr + '.png';
+        lastScreenshotFilename = 'Painel_Executivo_Centro_de_Custo_' + dateStr + '.png';
+        lastScreenshotDataUrl = canvas.toDataURL('image/png');
 
+        // Create blob for clipboard copy and clean download
         if (canvas.toBlob) {
-          canvas.toBlob(function(blob) {
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.download = fileName;
-            link.href = url;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
+          canvas.toBlob(function(b) {
+            lastScreenshotBlob = b;
           }, 'image/png');
-        } else {
-          const dataUrl = canvas.toDataURL('image/png');
-          const link = document.createElement('a');
-          link.download = fileName;
-          link.href = dataUrl;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
         }
 
-        showToast('ðŸ“¸ Captura de tela gerada e baixada com sucesso!');
+        // 1. Try automatic download
+        try {
+          const a = document.createElement('a');
+          a.download = lastScreenshotFilename;
+          a.href = lastScreenshotDataUrl;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } catch (e) {
+          console.warn('Download automÃ¡tico bloqueado, abrindo modal:', e);
+        }
+
+        // 2. Open Preview Modal
+        openScreenshotModal(lastScreenshotDataUrl);
+        showToast('ðŸ“¸ Captura gerada com sucesso! PrÃ©via disponÃ­vel no painel.');
 
         if (needsSwitch) {
           setTimeout(function() { switchTab(activeTabId); }, 400);
@@ -1319,6 +1323,70 @@
       } finally {
         if (btnText) btnText.textContent = originalText;
         if (btn) btn.disabled = false;
+      }
+    }
+
+    function openScreenshotModal(dataUrl) {
+      const modal = document.getElementById('screenshot-modal');
+      const img = document.getElementById('screenshot-preview-img');
+      if (img) img.src = dataUrl;
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+    }
+
+    function closeScreenshotModal() {
+      const modal = document.getElementById('screenshot-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    function downloadScreenshotAgain() {
+      if (!lastScreenshotDataUrl) return;
+      const a = document.createElement('a');
+      a.download = lastScreenshotFilename || 'Painel_Executivo.png';
+      a.href = lastScreenshotDataUrl;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast('ðŸ’¾ Download iniciado!');
+    }
+
+    async function copyScreenshotToClipboard() {
+      const btn = document.getElementById('btnModalCopy');
+      try {
+        if (!navigator.clipboard || !window.ClipboardItem) {
+          throw new Error('Navegador nÃ£o suporta cÃ³pia direta de imagem.');
+        }
+        let blob = lastScreenshotBlob;
+        if (!blob && lastScreenshotDataUrl) {
+          const res = await fetch(lastScreenshotDataUrl);
+          blob = await res.blob();
+        }
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        showToast('ðŸ“‹ Imagem copiada! Cole no WhatsApp com Ctrl + V.');
+        if (btn) {
+          btn.innerHTML = '<span>âœ… Copiado!</span>';
+          setTimeout(function() {
+            btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg><span>Copiar Imagem</span>';
+          }, 2000);
+        }
+      } catch (err) {
+        console.warn('Erro ao copiar imagem:', err);
+        alert('Para copiar a imagem: clique com o botÃ£o direito sobre ela na prÃ©via e escolha "Copiar imagem".');
+      }
+    }
+
+    function openScreenshotNewTab() {
+      if (!lastScreenshotDataUrl) return;
+      const win = window.open();
+      if (win) {
+        win.document.write('<title>Captura Executiva</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh;"><img src="' + lastScreenshotDataUrl + '" style="max-width:98vw;max-height:98vh;box-shadow:0 10px 30px rgba(0,0,0,0.5);border-radius:12px;"/></body>');
       }
     }
 
@@ -1341,5 +1409,52 @@
 
     try { initDashboard(); } catch(e) { window.addEventListener('DOMContentLoaded', initDashboard); }
   </script>
+  <!-- MODAL DE VISUALIZAÃ‡ÃƒO E DOWNLOAD DA CAPTURA -->
+  <div id="screenshot-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-3 md:p-6 overflow-y-auto">
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-5xl w-full p-4 md:p-6 shadow-2xl space-y-4 my-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+        <div>
+          <h3 class="text-base font-bold text-[var(--foreground)] flex items-center gap-2">
+            <span>ðŸ“¸ Captura Executiva Gerada</span>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 font-medium">PNG â€¢ Alta DefiniÃ§Ã£o (2x)</span>
+          </h3>
+          <p class="text-xs text-[var(--muted-foreground)] mt-0.5">
+            O download automÃ¡tico foi iniciado. VocÃª tambÃ©m pode baixar novamente, copiar ou abrir a imagem abaixo:
+          </p>
+        </div>
+        <button onclick="closeScreenshotModal()" class="p-1.5 rounded-xl hover:bg-[var(--secondary)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-lg leading-none" title="Fechar">
+          âœ•
+        </button>
+      </div>
+
+      <!-- Preview da Imagem -->
+      <div class="border border-[var(--border)] rounded-xl overflow-hidden bg-[var(--background)] max-h-[60vh] overflow-y-auto custom-scrollbar flex justify-center p-2">
+        <img id="screenshot-preview-img" src="" alt="Captura do Painel" class="max-w-full h-auto rounded-lg shadow" />
+      </div>
+
+      <!-- AÃ§Ãµes do Modal -->
+      <div class="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-[var(--border)]">
+        <div class="text-xs text-[var(--muted-foreground)]">
+          ðŸ’¡ <strong>Dica:</strong> Clique em <em>"Copiar Imagem"</em> para colar direto no WhatsApp (Ctrl + V).
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btnModalCopy" onclick="copyScreenshotToClipboard()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition-all flex items-center gap-1.5 shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+            <span>Copiar Imagem</span>
+          </button>
+          <button id="btnModalDownload" onclick="downloadScreenshotAgain()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center gap-1.5 shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span>Baixar PNG</span>
+          </button>
+          <button onclick="openScreenshotNewTab()" class="px-3.5 py-2 rounded-xl text-xs font-medium border border-[var(--border)] hover:bg-[var(--secondary)] transition-all">
+            Abrir em Nova Aba
+          </button>
+          <button onclick="closeScreenshotModal()" class="px-3.5 py-2 rounded-xl text-xs font-medium bg-[var(--secondary)] hover:bg-[var(--secondary)]/80 text-[var(--foreground)] transition-all">
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
