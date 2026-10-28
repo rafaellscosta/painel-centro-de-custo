@@ -1241,7 +1241,7 @@
     }
 
 
-    async function captureDashboardScreenshot() {
+        async function captureDashboardScreenshot() {
       const btn = document.getElementById('btnCaptureScreen');
       const btnText = document.getElementById('btnCaptureText');
       const originalText = btnText ? btnText.textContent : 'Capturar Tela';
@@ -1257,7 +1257,7 @@
 
         if (needsSwitch) {
           switchTab('overview');
-          await new Promise(r => setTimeout(r, 200));
+          await new Promise(function(resolve) { setTimeout(resolve, 250); });
         }
 
         const target = document.getElementById('executive-capture-zone') || document.querySelector('header');
@@ -1266,10 +1266,9 @@
         }
 
         if (typeof html2canvas === 'undefined') {
-          throw new Error('A biblioteca de captura (html2canvas) ainda nÃ£o terminou de carregar.');
+          throw new Error('A biblioteca de captura (html2canvas) nÃ£o foi carregada.');
         }
 
-        // Determine background color based on theme
         const isLight = document.documentElement.classList.contains('light');
         const bgColor = isLight ? '#f8fafc' : '#0b0f19';
 
@@ -1283,31 +1282,20 @@
           }
         });
 
-        // Generate download
-        const dateStr = new Date().toISOString().slice(0, 10);
-        const fileName = Painel_Executivo_Centro_de_Custo_.png;
+        const now = new Date();
+        const dateStr = now.toISOString().slice(0, 10);
+        const fileName = 'Painel_Executivo_Centro_de_Custo_' + dateStr + '.png';
 
         if (canvas.toBlob) {
           canvas.toBlob(function(blob) {
-            if (!blob) {
-              // Fallback to dataURL
-              const dataUrl = canvas.toDataURL('image/png');
-              const link = document.createElement('a');
-              link.download = fileName;
-              link.href = dataUrl;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            } else {
-              const url = URL.createObjectURL(blob);
-              const link = document.createElement('a');
-              link.download = fileName;
-              link.href = url;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
-            }
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = fileName;
+            link.href = url;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(function() { URL.revokeObjectURL(url); }, 1500);
           }, 'image/png');
         } else {
           const dataUrl = canvas.toDataURL('image/png');
@@ -1321,9 +1309,8 @@
 
         showToast('ðŸ“¸ Captura de tela gerada e baixada com sucesso!');
 
-        // Restore tab if switched
         if (needsSwitch) {
-          setTimeout(() => switchTab(activeTabId), 300);
+          setTimeout(function() { switchTab(activeTabId); }, 400);
         }
 
       } catch (err) {
@@ -1343,10 +1330,10 @@
         toast.className = 'fixed bottom-5 right-5 z-50 px-4 py-3 rounded-xl bg-emerald-600 text-white font-medium text-xs shadow-lg flex items-center gap-2 transition-all transform duration-300 opacity-0 translate-y-2';
         document.body.appendChild(toast);
       }
-      toast.innerHTML = <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span></span>;
+      toast.innerHTML = '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span>' + msg + '</span>';
       toast.classList.remove('opacity-0', 'translate-y-2');
       toast.classList.add('opacity-100', 'translate-y-0');
-      setTimeout(() => {
+      setTimeout(function() {
         toast.classList.remove('opacity-100', 'translate-y-0');
         toast.classList.add('opacity-0', 'translate-y-2');
       }, 3500);
